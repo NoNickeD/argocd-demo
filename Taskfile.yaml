@@ -1,0 +1,90 @@
+version: "3"
+
+tasks:
+  create-local-cluster:
+    desc: "🚀 Creates a local Kubernetes cluster using KinD for development and testing."
+    cmds:
+      - echo "✅ Initializing local Kubernetes cluster setup..."
+      - kind create cluster --config kind-config.yaml --name argocd-demo
+      - echo "🌍 Verifying cluster creation..."
+      - kind get clusters
+    silent: true
+
+  setup-kube-context:
+    desc: "🔧 Configures the Kubernetes context to interact with the local cluster."
+    cmds:
+      - echo "🔄 Setting up Kubernetes context for 'argocd-demo' cluster..."
+      - kubectl cluster-info --context kind-argocd-demo
+    silent: true
+
+  delete-local-cluster:
+    desc: "🗑️ Deletes the local Kubernetes cluster and frees up resources."
+    deps:
+      - setup-kube-context
+    cmds:
+      - echo "⚠️ Deleting the local Kubernetes cluster argocd-demo..."
+      - kind delete cluster --name argocd-demo
+    silent: true
+
+  install-metric-server:
+    desc: "📊 Installs the Kubernetes Metrics Server for resource monitoring."
+    deps:
+      - setup-kube-context
+    cmds:
+      - echo "📡 Deploying Metrics Server to enable resource utilization tracking..."
+      - helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/
+      - helm repo update metrics-server
+      - helm install metrics-server metrics-server/metrics-server --namespace kube-system --set 'args[0]=--kubelet-insecure-tls'
+    silent: true
+
+  tag-nodes:
+    desc: "🏷️ Labels nodes in the cluster to enable Ingress Controller and node affinity."
+    deps:
+      - setup-kube-context
+    cmds:
+      - echo "🔖 Tagging all nodes with 'ingress-ready' label..."
+      - kubectl label nodes --all ingress-ready=true
+      - echo "📌 Assigning topology zones to control-plane and worker nodes..."
+      - kubectl label node argocd-demo-control-plane topology.kubernetes.io/zone=zone-a
+      - kubectl label node argocd-demo-worker topology.kubernetes.io/zone=zone-b
+      - kubectl label node argocd-demo-worker2 topology.kubernetes.io/zone=zone-c
+    silent: true
+  
+  install-argocd:
+    desc: "🚀 Deploys ArgoCD in the local Kubernetes cluster for GitOps-based application management."
+    deps:
+      - setup-kube-context
+    cmds:
+      - echo "📥 Adding and updating the ArgoCD Helm repository..."
+      - helm repo add argo https://argoproj.github.io/argo-helm
+      - helm repo update argo
+      - echo "🛠️ Installing ArgoCD via Helm..."
+      - helm upgrade --install argocd argo/argo-cd --namespace argocd --create-namespace -f ./argocd/values.yaml
+      - echo "✅ ArgoCD installation complete! Use 'kubectl get pods -n argocd' to verify."
+    silent: true
+
+  install-cert-manager:
+    desc: "🔐 Installs Cert-Manager for automated TLS certificate management."
+    deps:
+      - setup-kube-context
+    cmds:
+      - echo "📥 Adding the Cert-Manager Helm repository..."
+      - helm repo add jetstack https://charts.jetstack.io
+      - helm repo update jetstack
+      - echo "🛠️ Installing Cert-Manager via Helm..."
+      - helm upgrade --install cert-manager jetstack/cert-manager --namespace cert-manager --create-namespace --set installCRDs=true
+      - echo "✅ Cert-Manager installation complete! Use 'kubectl get pods -n cert-manager' to verify."
+    silent: true
+
+  full-deploy-local:
+    desc: "🚀 Deploys a fully functional local cluster with all necessary components. Ideal for development, testing, and demos."
+    cmds:
+      - echo "🔄 Initiating full deployment of the local Kubernetes cluster and essential services..."
+      - task: create-local-cluster
+      - task: setup-kube-context
+      - task: install-metric-server
+      - task: tag-nodes
+      - task: install-argocd
+      - task: install-cert-manager
+      - echo "🎉 Full deployment completed! Use 'kubectl get nodes' to verify the cluster state."
+    silent: true

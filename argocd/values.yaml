@@ -1,0 +1,70 @@
+## ArgoCD Helm Values
+## This file configures ArgoCD following security, performance, and observability best practices.
+
+# General settings
+global:
+  domain: argocd.local  # Set a proper domain name for local access
+  networkPolicy:
+    create: true  # Enforce NetworkPolicies to restrict ingress traffic
+    defaultDenyIngress: true  # Block all ingress traffic unless explicitly allowed
+  revisionHistoryLimit: 1  # Reduce old deployments to save resources
+  deploymentStrategy:
+    type: RollingUpdate  # Ensures zero downtime deployments
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+
+# Security enhancements
+configs:
+  cm:
+    admin.enabled: true
+    exec.enabled: false  # Prevent users from executing commands via Argo UI
+    server.rbac.log.enforce.enable: true  # Log RBAC enforcement for security audits
+  params:
+    controller.status.processors: 40  # Increase workers for faster application status updates
+    controller.operation.processors: 20  # Increase sync processors for better performance
+    controller.repo.server.timeout.seconds: 120  # Increase repo server timeout for large repos
+    otlp.address: "otel-collector.default.svc:4317"  # Enable OpenTelemetry tracing for observability
+
+# Application Controller
+controller:
+  pdb:
+    enabled: true  # Enable Pod Disruption Budget to improve HA
+    minAvailable: 1  # At least 1 pod must always be available
+  containerSecurityContext:
+    runAsNonRoot: true  # Prevent running as root
+    readOnlyRootFilesystem: true  # Restrict filesystem writes
+    allowPrivilegeEscalation: false  # Block privilege escalation
+    seccompProfile:
+      type: RuntimeDefault  # Use default secure profile
+    capabilities:
+      drop:
+      - ALL  # Drop all unnecessary Linux capabilities
+  metrics:
+    enabled: true  # Enable Prometheus metrics
+    serviceMonitor:
+      enabled: true  # Deploy ServiceMonitor for Prometheus
+
+# Ingress Configuration
+server:
+  ingress:
+    enabled: true  # Expose ArgoCD via Ingress
+    annotations:
+      nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    hosts:
+      - argocd.local  # Define custom hostname
+    paths:
+      - /
+    pathType: Prefix
+
+# Redis Optimization
+redis:
+  resources:
+    limits:
+      memory: 128Mi  # Limit memory usage for local clusters
+    requests:
+      memory: 64Mi
+
+# Disable Dex (SSO) if not in use
+dex:
+  enabled: false  # Saves resources if SSO is not required

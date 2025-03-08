@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server
+  namespace: argocd
+  annotations:
+    projectcontour.io/websocket-routes: "/"
+spec:
+  ingressClassName: contour
+  tls:
+    - hosts:
+        - argocd.local
+      secretName: argocd-tls
+  rules:
+    - host: argocd.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 80
